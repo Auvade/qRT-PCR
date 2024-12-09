@@ -1,0 +1,75 @@
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Example data (replace with your actual dataset)
+set.seed(123)
+data <- data.frame(
+  Control = rep(paste("Control", 1:12), each = 6),
+  Gene = rep(paste("Gene", LETTERS[1:12]), each = 6),
+  Replicate = rep(c(1, 2), times = 36),
+  Template = rep(c(2, 0.5, 0.125), times = 24), # Example template values
+  Cq = rnorm(72, mean = 25, sd = 2) - log2(rep(c(2, 0.5, 0.125), times = 24)) * 3
+)
+
+# Prepare data for plotting and regression
+data <- data %>% mutate(LogTemplate = log2(Template)) # Use log2()
+
+# Perform linear regression and calculate R², slope, standard deviation, and average Cq for specific Template values
+regression_results <- data %>%
+  group_by(Control, Gene) %>%
+  summarize(
+    lm_model = list(lm(Cq ~ LogTemplate, data = cur_data())), # Linear model
+    Average_Cq = mean(Cq), # Calculate overall average Cq
+    Std_Dev_Cq = sd(Cq), # Calculate standard deviation of Cq
+    Avg_Cq_Template_2 = mean(Cq[Template == 2], na.rm = TRUE), # Average Cq where Template = 2
+    Avg_Cq_Template_0_5 = mean(Cq[Template == 0.5], na.rm = TRUE), # Average Cq where Template = 0.5
+    Avg_Cq_Template_0_125 = mean(Cq[Template == 0.125], na.rm = TRUE), # Average Cq where Template = 0.125
+    .groups = "drop"
+  ) %>%
+  mutate(
+    R_squared = sapply(lm_model, function(model) summary(model)$r.squared), # Extract R²
+    Slope = sapply(lm_model, function(model) coef(model)["LogTemplate"]), # Extract slope
+    Control_Number = as.numeric(gsub(".*\\s", "", Control)) # Extract numeric part of Control
+  )
+
+# Extract table with required values and sort by Control_Number
+r2_table <- regression_results %>%
+  select(
+    Control, Gene, R_squared, Slope, Average_Cq, Std_Dev_Cq, 
+    Avg_Cq_Template_2, Avg_Cq_Template_0_5, Avg_Cq_Template_0_125, Control_Number
+  ) %>%
+  arrange(Control_Number) %>%
+  select(-Control_Number) # Remove the temporary sorting column
+
+# Save the table as a CSV file
+write.csv(r2_table, "r2_table.csv", row.names = FALSE)
+
+# Create plots for each control
+plots <- lapply(unique(data$Control), function(control) {
+  control_data <- data %>% filter(Control == control)
+  gene_name <- unique(control_data$Gene)
+  model <- lm(Cq ~ LogTemplate, data = control_data)
+  r_squared <- summary(model)$r.squared
+  slope <- coef(model)["LogTemplate"]
+  
+  ggplot(control_data, aes(x = LogTemplate, y = Cq)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE, color = "blue") +
+    labs(
+      title = paste(control, "-", gene_name),
+      subtitle = paste("R² =", round(r_squared, 3), "| Slope =", round(slope, 3)),
+      x = "Log2(Template)",
+      y = "Cq Value"
+    ) +
+    theme_minimal()
+})
+
+# Save plots and display R² table
+for (i in seq_along(plots)) {
+  ggsave(filename = paste0("Plot_", unique(data$Control)[i], ".png"), plot = plots[[i]])
+}
+
+# Print the R² table
+print(r2_table)
