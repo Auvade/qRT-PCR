@@ -1,0 +1,83 @@
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Example data (replace with your actual dataset)
+set.seed(123)
+data <- data.frame(
+  SamplePrep = rep(c("Method A", "Method B", "Method C"), each = 12),
+  Gene = rep(c("Gene 1", "Gene 2"), each = 6, times = 3),
+  Template = rep(c(4, 2, 1), times = 6),
+  Replicate = rep(c(1, 2), times = 18),
+  Cq = rnorm(36, mean = 25, sd = 2) - log2(rep(c(4, 2, 1), times = 6)) * 3
+)
+
+# Prepare data for plotting and regression
+data <- data %>% mutate(LogTemplate = log2(Template)) # Use log2()
+
+# Perform linear regression and calculate required statistics
+regression_results <- data %>%
+  group_by(SamplePrep, Gene) %>%
+  summarize(
+    lm_model = list(lm(Cq ~ LogTemplate, data = cur_data())), # Linear model
+    Average_Cq = mean(Cq), # Overall average Cq
+    Std_Dev_Cq = sd(Cq), # Standard deviation of Cq
+    Avg_Cq_Template_4 = mean(Cq[Template == 4], na.rm = TRUE), # Average Cq for Template = 4
+    Std_Dev_Template_4 = sd(Cq[Template == 4], na.rm = TRUE), # Standard deviation for Template = 4
+    Avg_Cq_Template_2 = mean(Cq[Template == 2], na.rm = TRUE), # Average Cq for Template = 2
+    Std_Dev_Template_2 = sd(Cq[Template == 2], na.rm = TRUE), # Standard deviation for Template = 2
+    Avg_Cq_Template_1 = mean(Cq[Template == 1], na.rm = TRUE), # Average Cq for Template = 1
+    Std_Dev_Template_1 = sd(Cq[Template == 1], na.rm = TRUE), # Standard deviation for Template = 1
+    .groups = "drop"
+  ) %>%
+  mutate(
+    R_squared = sapply(lm_model, function(model) summary(model)$r.squared), # Extract R²
+    Slope = sapply(lm_model, function(model) coef(model)["LogTemplate"]) # Extract slope
+  )
+
+# Extract table with required values
+summary_table <- regression_results %>%
+  select(
+    SamplePrep, Gene, R_squared, Slope, Average_Cq, Std_Dev_Cq,
+    Avg_Cq_Template_4, Std_Dev_Template_4,
+    Avg_Cq_Template_2, Std_Dev_Template_2,
+    Avg_Cq_Template_1, Std_Dev_Template_1
+  )
+
+# Save the summary table as a CSV file
+write.csv(summary_table, "summary_table.csv", row.names = FALSE)
+
+# Create plots for each SamplePrep and Gene
+plots <- lapply(unique(data$SamplePrep), function(sample_prep) {
+  lapply(unique(data$Gene), function(gene) {
+    gene_data <- data %>% filter(SamplePrep == sample_prep, Gene == gene)
+    model <- lm(Cq ~ LogTemplate, data = gene_data)
+    r_squared <- summary(model)$r.squared
+    slope <- coef(model)["LogTemplate"]
+    
+    ggplot(gene_data, aes(x = LogTemplate, y = Cq)) +
+      geom_point() +
+      geom_smooth(method = "lm", se = FALSE, color = "blue") +
+      labs(
+        title = paste(sample_prep, "-", gene),
+        subtitle = paste("R² =", round(r_squared, 3), "| Slope =", round(slope, 3)),
+        x = "Log2(Template)",
+        y = "Cq Value"
+      ) +
+      theme_bw()
+  })
+})
+
+# Save plots for each SamplePrep and Gene
+for (i in seq_along(plots)) {
+  for (j in seq_along(plots[[i]])) {
+    ggsave(
+      filename = paste0("Plot_", unique(data$SamplePrep)[i], "_", unique(data$Gene)[j], ".png"),
+      plot = plots[[i]][[j]]
+    )
+  }
+}
+
+# Display the summary table
+print(summary_table)
