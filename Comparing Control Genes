@@ -22,7 +22,9 @@ regression_results <- data %>%
   summarize(
     lm_model = list(lm(Cq ~ LogTemplate, data = cur_data())), # Linear model
     Average_Cq = mean(Cq), # Calculate overall average Cq
-    Std_Dev_Cq = sd(Cq), # Calculate standard deviation of Cq
+    Std_Dev_Cq_Template_2 = sd(Cq[Template == 2], na.rm = TRUE), # Calculate standard deviation of Cq where Template = 2
+    Std_Dev_Cq_Template_0_5 = sd(Cq[Template == 0.5], na.rm = TRUE), # Calculate standard deviation of Cq where Template = 0.5
+    Std_Dev_Cq_Template_0_125 = sd(Cq[Template == 0.125], na.rm = TRUE), # Calculate standard deviation of Cq where Template = 0.125
     Avg_Cq_Template_2 = mean(Cq[Template == 2], na.rm = TRUE), # Average Cq where Template = 2
     Avg_Cq_Template_0_5 = mean(Cq[Template == 0.5], na.rm = TRUE), # Average Cq where Template = 0.5
     Avg_Cq_Template_0_125 = mean(Cq[Template == 0.125], na.rm = TRUE), # Average Cq where Template = 0.125
@@ -37,8 +39,8 @@ regression_results <- data %>%
 # Extract table with required values and sort by Control_Number
 r2_table <- regression_results %>%
   select(
-    Control, Gene, R_squared, Slope, Average_Cq, Std_Dev_Cq, 
-    Avg_Cq_Template_2, Avg_Cq_Template_0_5, Avg_Cq_Template_0_125, Control_Number
+    Control, Gene, R_squared, Slope, Average_Cq, 
+    Avg_Cq_Template_2, Avg_Cq_Template_0_5, Avg_Cq_Template_0_125, Std_Dev_Cq_Template_2, Std_Dev_Cq_Template_0_5, Std_Dev_Cq_Template_0_125, Control_Number
   ) %>%
   arrange(Control_Number) %>%
   select(-Control_Number) # Remove the temporary sorting column
@@ -63,7 +65,7 @@ plots <- lapply(unique(data$Control), function(control) {
       x = "Log2(Template)",
       y = "Cq Value"
     ) +
-    theme_minimal()
+    theme_bw()
 })
 
 # Save plots and display R² table
