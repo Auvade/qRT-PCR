@@ -1,0 +1,124 @@
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Simulated dataset (replace this with your actual data)
+data <- data.frame(
+  MixCondition = rep(c("Mixed", "NotMixed"), each = 25),
+  Target = rep(c("Target1", "Target2"), each = 5, times = 5),
+  CqValue = rnorm(50, mean = 30, sd = 2)  # Replace with actual Cq values
+)
+
+# Prepare data for plotting and regression
+data <- data %>% mutate(LogTemplate = log2(Template)) # Use log2()
+
+# Perform linear regression and calculate required statistics
+regression_results <- data %>%
+  group_by(MixCondition, Target) %>%
+  summarize(
+    lm_model = list(lm(Cq ~ LogTemplate, data = cur_data())), # Linear model
+    Average_Cq = mean(Cq), # Overall average Cq
+    Std_Dev_Cq = sd(Cq), # Overall standard deviation of Cq
+    Avg_Template_4 = mean(Cq[Template == 4], na.rm = TRUE), # Average Cq for Template = 4
+    Std_Dev_Template_4 = sd(Cq[Template == 4], na.rm = TRUE), # Standard deviation for Template = 4
+    Avg_Template_2 = mean(Cq[Template == 2], na.rm = TRUE), # Average Cq for Template = 2
+    Std_Dev_Template_2 = sd(Cq[Template == 2], na.rm = TRUE), # Standard deviation for Template = 2
+    Avg_Template_1 = mean(Cq[Template == 1], na.rm = TRUE), # Average Cq for Template = 1
+    Std_Dev_Template_1 = sd(Cq[Template == 1], na.rm = TRUE), # Standard deviation for Template = 1
+    .groups = "drop"
+  ) %>%
+  mutate(
+    R_squared = sapply(lm_model, function(model) summary(model)$r.squared), # Extract R²
+    Slope = sapply(lm_model, function(model) coef(model)["LogTemplate"]) # Extract slope
+  )
+
+# Reorganize table with averages first, followed by standard deviations
+summary_table <- regression_results %>%
+  select(
+    MixCondition, Target, R_squared, Slope, Average_Cq, Std_Dev_Cq,
+    Avg_Template_4, Avg_Template_2, Avg_Template_1,
+    Std_Dev_Template_4, Std_Dev_Template_2, Std_Dev_Template_1
+  )
+
+# Save the summary table as a CSV file
+write.csv(summary_table, "summary_table.csv", row.names = FALSE)
+
+# Create plots for each MixCondition and Target
+plots <- lapply(unique(data$MixCondition), function(mix_condition) {
+  lapply(unique(data$Target), function(target) {
+    target_data <- data %>% filter(MixCondition == mix_condition, Target == target)
+    model <- lm(Cq ~ LogTemplate, data = target_data)
+    r_squared <- summary(model)$r.squared
+    slope <- coef(model)["LogTemplate"]
+    
+    ggplot(target_data, aes(x = LogTemplate, y = Cq)) +
+      geom_point() +
+      geom_smooth(method = "lm", se = FALSE, color = "blue") +
+      labs(
+        title = paste(mix_condition, "-", target),
+        subtitle = paste("R² =", round(r_squared, 3), "| Slope =", round(slope, 3)),
+        x = "Log2(Template)",
+        y = "Cq Value"
+      ) +
+      theme_bw()
+  })
+})
+
+# Save plots for each MixCondition and Target
+for (i in seq_along(plots)) {
+  for (j in seq_along(plots[[i]])) {
+    ggsave(
+      filename = paste0("Plot_", unique(data$MixCondition)[i], "_", unique(data$Target)[j], ".png"),
+      plot = plots[[i]][[j]]
+    )
+  }
+}
+
+# Display the summary table
+print(summary_table)
+
+# Perform ANOVA for each Target
+anova_results <- data %>%
+  group_by(Target) %>%
+  summarize(
+    anova_model = list(aov(Cq ~ MixCondition, data = cur_data())),
+    .groups = "drop"
+  )
+
+# Extract ANOVA summary for each Target
+anova_summary <- lapply(anova_results$anova_model, summary)
+
+# Display ANOVA summaries
+for (i in seq_along(anova_summary)) {
+  cat("ANOVA for", anova_results$Target[i], ":\n")
+  print(anova_summary[[i]])
+  cat("\n")
+}
+
+# Save ANOVA results to a table
+anova_table <- data.frame(
+  Target = anova_results$Target,
+  F_Value = sapply(anova_results$anova_model, function(model) summary(model)[[1]]["MixCondition", "F value"]),
+  P_Value = sapply(anova_results$anova_model, function(model) summary(model)[[1]]["MixCondition", "Pr(>F)"])
+)
+
+# Save the ANOVA table as a CSV file
+write.csv(anova_table, "anova_results.csv", row.names = FALSE)
+
+# Print the ANOVA table
+print(anova_table)
+
+# Generate comparison plots grouped by target
+comparison_plot <- ggplot(data, aes(x = MixCondition, y = Cq, fill = MixCondition)) +
+  geom_boxplot() +
+  facet_wrap(~ Target) +
+  theme_bw() +
+  labs(
+    title = "Comparison of Cq Values by Mix Condition",
+    x = "Mix Condition",
+    y = "Cq Value"
+  )
+
+# Save comparison plot as an image
+ggsave("comparison_plot_mix_condition.png", comparison_plot)
