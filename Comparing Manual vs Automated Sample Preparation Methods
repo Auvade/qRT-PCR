@@ -3,25 +3,22 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 
-# # Example data (replace with your actual dataset)
-# set.seed(123)
-# data <- data.frame(
-#   Condition = rep(c("NotMixed", "Manual", "Mixed"), each = 6),
-#   Target = c(rep("Target 1", 3), rep("Target 2", 3), rep("Target 1", 3), rep("Target 3", 3), rep("Target 1", 3), rep("Target 2", 3)),
-#   Template = rep(2, times = 18), # Only Template = 2
-#   Replicate = rep(1:3, times = 6),
-#   Cq = rnorm(18, mean = 25, sd = 1.5)
-# )
-
-# Only the Teplate = 2 is shared between the two experiments. 
-# Only the NotMixed condition will be used for automation in the future. 
-# Not all of the same controls were used in each experiment.
+# Example data (replace with your actual dataset)
+ set.seed(123)
+ data <- data.frame(
+   Condition = rep(c("NotMixed", "Manual", "Mixed"), each = 6),
+   Target = c(rep("Target 1", 3), rep("Target 2", 3), rep("Target 1", 3), rep("Target 3", 3), rep("Target 1", 3), rep("Target 2", 3)),
+   Template = rep(2, times = 18), # Only Template = 2
+   Replicate = rep(1:3, times = 6),
+   Cq = rnorm(18, mean = 25, sd = 1.5)
+ )
 
 # Filter data: exclude "Mixed" condition and keep Template = 2
 data_filtered <- data %>%
-  filter(Condition %in% c("NotMixed", "Manual"), Template == 2)
+  filter(Condition %in% c("NotMixed", "Manual"), Template == 2) %>%
+  mutate(Condition = ifelse(Condition == "NotMixed", "Automated", Condition)) # Replace "NotMixed" with "Automated"
 
-# Identify common Targets between "NotMixed" and "Manual"
+# Identify common Targets between "Automated" and "Manual"
 common_targets <- data_filtered %>%
   group_by(Target, Condition) %>%
   summarize(n = n(), .groups = "drop") %>%
@@ -33,7 +30,7 @@ common_targets <- data_filtered %>%
 # Filter data to include only common targets
 data_filtered <- data_filtered %>% filter(Target %in% common_targets)
 
-# Summary table: compare NotMixed vs Manual at Template = 2 for common Targets
+# Summary table: compare Automated vs Manual at Template = 2 for common Targets
 summary_table <- data_filtered %>%
   group_by(Condition, Target) %>%
   summarize(
@@ -48,7 +45,7 @@ summary_table <- data_filtered %>%
   )
 
 # Save the summary table as a CSV file
-write.csv(summary_table, "summary_table_NotMixed_vs_Manual_common_targets.csv", row.names = FALSE)
+write.csv(summary_table, "summary_table_Automated_vs_Manual_common_targets.csv", row.names = FALSE)
 
 # Print the summary table
 print(summary_table)
@@ -79,10 +76,11 @@ anova_table <- data.frame(
 )
 
 # Save the ANOVA table as a CSV file
-write.csv(anova_table, "anova_results_NotMixed_vs_Manual_common_targets.csv", row.names = FALSE)
+write.csv(anova_table, "anova_results_Automated_vs_Manual_common_targets.csv", row.names = FALSE)
 
 # Print the ANOVA table
 print(anova_table)
+
 
 # Generate comparison boxplots grouped by Target
 comparison_plot <- ggplot(data_filtered, aes(x = Condition, y = Cq, fill = Condition)) +
@@ -90,7 +88,7 @@ comparison_plot <- ggplot(data_filtered, aes(x = Condition, y = Cq, fill = Condi
   facet_wrap(~ Target) +
   theme_bw() +
   labs(
-    title = "Comparison of Cq Values: NotMixed vs Manual for Common Targets at Template = 2",
+    title = "Comparison of Cq Values: Automated vs Manual \nfor Common Targets at Template = 2",
     x = "Condition",
     y = "Cq Value"
   )
