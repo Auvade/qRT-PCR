@@ -1,0 +1,103 @@
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# # Example data (replace with your actual dataset)
+# set.seed(123)
+# data <- data.frame(
+#   Condition = rep(c("NotMixed", "Manual", "Mixed"), each = 6),
+#   Target = c(rep("Target 1", 3), rep("Target 2", 3), rep("Target 1", 3), rep("Target 3", 3), rep("Target 1", 3), rep("Target 2", 3)),
+#   Template = rep(2, times = 18), # Only Template = 2
+#   Replicate = rep(1:3, times = 6),
+#   Cq = rnorm(18, mean = 25, sd = 1.5)
+# )
+
+# Only the Teplate = 2 is shared between the two experiments. 
+# Only the NotMixed condition will be used for automation in the future. 
+# Not all of the same controls were used in each experiment.
+
+# Filter data: exclude "Mixed" condition and keep Template = 2
+data_filtered <- data %>%
+  filter(Condition %in% c("NotMixed", "Manual"), Template == 2)
+
+# Identify common Targets between "NotMixed" and "Manual"
+common_targets <- data_filtered %>%
+  group_by(Target, Condition) %>%
+  summarize(n = n(), .groups = "drop") %>%
+  group_by(Target) %>%
+  filter(n_distinct(Condition) == 2) %>% # Ensure both conditions are present
+  pull(Target) %>%
+  unique()
+
+# Filter data to include only common targets
+data_filtered <- data_filtered %>% filter(Target %in% common_targets)
+
+# Summary table: compare NotMixed vs Manual at Template = 2 for common Targets
+summary_table <- data_filtered %>%
+  group_by(Condition, Target) %>%
+  summarize(
+    Avg_Cq = mean(Cq),
+    Std_Dev_Cq = sd(Cq),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = Condition,
+    values_from = c(Avg_Cq, Std_Dev_Cq),
+    names_sep = "_"
+  )
+
+# Save the summary table as a CSV file
+write.csv(summary_table, "summary_table_NotMixed_vs_Manual_common_targets.csv", row.names = FALSE)
+
+# Print the summary table
+print(summary_table)
+
+# Perform ANOVA for each Target at Template = 2
+anova_results <- data_filtered %>%
+  group_by(Target) %>%
+  summarize(
+    anova_model = list(aov(Cq ~ Condition, data = cur_data())),
+    .groups = "drop"
+  )
+
+# Extract ANOVA summary for each Target
+anova_summary <- lapply(anova_results$anova_model, summary)
+
+# Display ANOVA summaries
+for (i in seq_along(anova_summary)) {
+  cat("ANOVA for", anova_results$Target[i], ":\n")
+  print(anova_summary[[i]])
+  cat("\n")
+}
+
+# Save ANOVA results to a table
+anova_table <- data.frame(
+  Target = anova_results$Target,
+  F_Value = sapply(anova_results$anova_model, function(model) summary(model)[[1]]["Condition", "F value"]),
+  P_Value = sapply(anova_results$anova_model, function(model) summary(model)[[1]]["Condition", "Pr(>F)"])
+)
+
+# Save the ANOVA table as a CSV file
+write.csv(anova_table, "anova_results_NotMixed_vs_Manual_common_targets.csv", row.names = FALSE)
+
+# Print the ANOVA table
+print(anova_table)
+
+# Generate comparison boxplots grouped by Target
+comparison_plot <- ggplot(data_filtered, aes(x = Condition, y = Cq, fill = Condition)) +
+  geom_boxplot() +
+  facet_wrap(~ Target) +
+  theme_bw() +
+  labs(
+    title = "Comparison of Cq Values: NotMixed vs Manual for Common Targets at Template = 2",
+    x = "Condition",
+    y = "Cq Value"
+  )
+
+# Save comparison plot as an image
+ggsave("comparison_plot_NotMixed_vs_Manual_common_targets.png", comparison_plot)
+
+# Print success message
+cat("Analysis complete. Outputs saved as 'summary_table_NotMixed_vs_Manual_common_targets.csv',",
+    "'anova_results_NotMixed_vs_Manual_common_targets.csv', and 'comparison_plot_NotMixed_vs_Manual_common_targets.png'\n")
