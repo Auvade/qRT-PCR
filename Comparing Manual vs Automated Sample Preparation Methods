@@ -94,8 +94,8 @@ comparison_plot <- ggplot(data_filtered, aes(x = Condition, y = Cq, fill = Condi
   )
 
 # Save comparison plot as an image
-ggsave("comparison_plot_NotMixed_vs_Manual_common_targets.png", comparison_plot)
+ggsave("Comparison of Cq Values: Automated vs Manual \nfor Common Targets at Template = 2.png", comparison_plot)
 
 # Print success message
-cat("Analysis complete. Outputs saved as 'summary_table_NotMixed_vs_Manual_common_targets.csv',",
-    "'anova_results_NotMixed_vs_Manual_common_targets.csv', and 'comparison_plot_NotMixed_vs_Manual_common_targets.png'\n")
+cat("Analysis complete. Outputs saved as 'summary_table_Automated_vs_Manual_common_targets.csv',",
+    "'anova_results_Automated_vs_Manual_common_targets.csv', and 'comparison_plot_Automated_vs_Manual_common_targets.png'\n")
