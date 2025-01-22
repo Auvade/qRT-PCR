@@ -1,5 +1,9 @@
-# Load in data
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(readr)
 
+# Load in your data or the "Butterfly Plot Example Data.csv" file.
 
 # Ensure data structure is correct
 str(data)
@@ -58,7 +62,6 @@ write.csv(summary_data, "summary_stats_excluding_endogenous.csv", row.names = FA
 
 # Plot butterfly plot with error bars and dots for wells
 butterfly_plot <- ggplot(summary_data, aes(x = Target, y = FoldChangeLog2_Mean, fill = Target)) +
-  scale_fill_manual(values = c("cadetblue", "#C8102E", "#96D8D8", "#B2EE79", "#308AAD")) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.6) +
   geom_errorbar(aes(ymin = FoldChangeLog2_Mean - FoldChangeLog2_SD, ymax = FoldChangeLog2_Mean + FoldChangeLog2_SD),
                 width = 0.2, position = position_dodge(width = 0.7)) +
