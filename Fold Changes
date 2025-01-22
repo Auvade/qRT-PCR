@@ -1,0 +1,79 @@
+# Load in data
+
+
+# Ensure data structure is correct
+str(data)
+
+# Exclude NTC samples
+data <- data %>%
+  filter(Sample != "NTC")
+
+# Define the reference sample and endogenous control
+reference_sample <- "DMSO"
+
+# Calculate ΔCt for each well using the corresponding endogenous control
+data <- data %>%
+  group_by(Well) %>%
+  mutate(DeltaCt = Cq - Cq[Target == EndogenousPair]) %>%
+  ungroup()
+
+# Calculate average Cq values for each target and sample type
+avg_cq_values <- data %>%
+  group_by(Sample, Target) %>%
+  summarise(AverageCq = mean(Cq, na.rm = TRUE)) %>%
+  ungroup()
+
+# Calculate reference sample ΔCt for each target
+reference_means <- data %>%
+  filter(Sample == reference_sample) %>%
+  group_by(Target) %>%
+  summarise(ReferenceDeltaCt = mean(DeltaCt, na.rm = TRUE)) %>%
+  ungroup()
+
+# Calculate ΔΔCt for each well relative to the mean ΔCt of the reference sample
+data <- data %>%
+  left_join(reference_means, by = "Target") %>%
+  mutate(
+    DeltaDeltaCt = DeltaCt - ReferenceDeltaCt,
+    FoldChangeLog2 = -DeltaDeltaCt
+  )
+
+# Exclude reference samples and endogenous genes from plotting
+endogenous_genes <- unique(data$EndogenousPair)
+plot_data <- data %>%
+  filter(Sample != reference_sample, !(Target %in% endogenous_genes))
+
+# Calculate mean and standard error for each sample and target
+summary_data <- plot_data %>%
+  group_by(Sample, Target) %>%
+  summarise(
+    FoldChangeLog2_Mean = mean(FoldChangeLog2, na.rm = TRUE),
+    FoldChangeLog2_SD = sd(FoldChangeLog2, na.rm = TRUE) / sqrt(n())
+  ) %>%
+  ungroup()
+
+# Save the calculated values as a CSV file
+write.csv(data, "calculated_values_excluding_endogenous.csv", row.names = FALSE)
+write.csv(summary_data, "summary_stats_excluding_endogenous.csv", row.names = FALSE)
+
+# Plot butterfly plot with error bars and dots for wells
+butterfly_plot <- ggplot(summary_data, aes(x = Target, y = FoldChangeLog2_Mean, fill = Target)) +
+  scale_fill_manual(values = c("cadetblue", "#C8102E", "#96D8D8", "#B2EE79", "#308AAD")) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.6) +
+  geom_errorbar(aes(ymin = FoldChangeLog2_Mean - FoldChangeLog2_SD, ymax = FoldChangeLog2_Mean + FoldChangeLog2_SD),
+                width = 0.2, position = position_dodge(width = 0.7)) +
+  geom_point(data = plot_data, aes(x = Target, y = FoldChangeLog2),
+             position = position_dodge2(width = 0.7), size = 2) +
+  labs(title = "TBXT Biomarkers Gene Expression of 10 µM TAL61 48h Treated JHC7", 
+       x = "Target Genes", 
+       y = "Log2 Fold Change", 
+       fill = "Sample", 
+       color = "Sample") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+# Save plot
+ggsave("butterfly_plot_excluding_endogenous.png", butterfly_plot, width = 10, height = 6)
+
+# Show plot
+print(butterfly_plot)
