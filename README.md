@@ -5,6 +5,11 @@ The desire is to fit a kit that saves money, provides high-quality results, and 
 
 The kit's user guides are not followed strictly, the same volume of elution buffer is used for more acceptable comparisons.
 
+## Fold changes butterfly plot:
+This repository has example data to generate a butterfly plot of log2 fold-changes with two endogenous controls, four sample types, three drug treatments, and one DMSO or negative control. No sample dilutions were necessary for this experiment since the main purpose was to find the Cq values of genes of interest (GOI). TaqMan Assays can be paired for downstream multiplex validation provided this information. 
+
+The treatments used are potential treatment controls, so it is important to determine whether these drug treatments affect the endogenous controls. 
+
 ## For multiplex validation: 
 Cq values. Singleplex and multiplex reactions should be within one Cq value for each dilution. Use a single threshold across singleplex and multiplex reactions being compared. 
 
