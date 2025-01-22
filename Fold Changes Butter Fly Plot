@@ -1,6 +1,7 @@
 # Load necessary libraries
 library(ggplot2)
 library(dplyr)
+library(tidyr)
 library(readr)
 
 # Load in your data or the "Butterfly Plot Example Data.csv" file.
