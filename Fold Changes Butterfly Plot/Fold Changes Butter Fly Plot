@@ -1,10 +1,28 @@
+---
+title: "Fold Changes Butter Fly Plot"
+author: "Bodhi Hueffmeier"
+date: "2025-07-31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+This is the original code for the butterfly plot, which calculates fold changes and generates a plot based on gene expression data. The code processes the data to compute ΔCt and ΔΔCt values, excluding NTC samples and endogenous genes from the final plot. The resulting butterfly plot visualizes the log2 fold changes of target genes across different samples.
+```{r}
 # Load necessary libraries
 library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(readr)
 
+# Set working directory (optional, adjust as needed)
+# setwd("path/to/your/directory")
+
 # Load in your data or the "Butterfly Plot Example Data.csv" file.
+data <- read_csv("Desktop/Universal Folder/Data Analysis Projects/Cell Biology/Gene Expression Analysis/Butterfly Plot Example Data.csv")
 
 # Ensure data structure is correct
 str(data)
@@ -61,14 +79,14 @@ summary_data <- plot_data %>%
 write.csv(data, "calculated_values_excluding_endogenous.csv", row.names = FALSE)
 write.csv(summary_data, "summary_stats_excluding_endogenous.csv", row.names = FALSE)
 
-# Plot butterfly plot with error bars and dots for wells
+# Plot a butterfly plot with error bars and dots for wells
 butterfly_plot <- ggplot(summary_data, aes(x = Target, y = FoldChangeLog2_Mean, fill = Target)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.6) +
   geom_errorbar(aes(ymin = FoldChangeLog2_Mean - FoldChangeLog2_SD, ymax = FoldChangeLog2_Mean + FoldChangeLog2_SD),
                 width = 0.2, position = position_dodge(width = 0.7)) +
-  geom_point(data = plot_data, aes(x = Target, y = FoldChangeLog2),
-             position = position_dodge2(width = 0.7), size = 2) +
-  labs(title = "TBXT Biomarkers Gene Expression of 10 µM TAL61 48h Treated JHC7", 
+  geom_point(data = plot_data, aes(x = Target, y = FoldChangeLog2, fill = Target),
+             position = position_dodge2(width = 0.7), size = 2, shape = 21) +
+  labs(title = "Disease Biomarkers Gene Expression of 10 µM Compund 48h Treated Cell Line X", 
        x = "Target Genes", 
        y = "Log2 Fold Change", 
        fill = "Sample", 
@@ -81,3 +99,4 @@ ggsave("butterfly_plot_excluding_endogenous.png", butterfly_plot, width = 10, he
 
 # Show plot
 print(butterfly_plot)
+```
