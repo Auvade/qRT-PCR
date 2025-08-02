@@ -1,15 +1,33 @@
+---
+title: "Endogenous Control Gene Comparison"
+author: "Bodhi Hueffmeier"
+date: "2025-08-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
 # Load required libraries
 library(ggplot2)
 library(dplyr)
 library(tidyr)
+library(gridExtra)
+
+# Set working directory to where the data is located
+setwd("~/Desktop/Universal Folder/Data Analysis Projects/Cell Biology/Endogenous Control Gene Comparison")
 
 # Example data (replace with your actual dataset)
+# This example data simulates a senario with 12 controls, 12 genes, and 6 replicates per control-gene combination.
 set.seed(123)
 data <- data.frame(
   Control = rep(paste("Control", 1:12), each = 6),
   Gene = rep(paste("Gene", LETTERS[1:12]), each = 6),
   Replicate = rep(c(1, 2), times = 36),
-  Template = rep(c(2, 0.5, 0.125), times = 24), # Example template values
+  Template = rep(c(2, 0.5, 0.125), times = 24), # Example template volumes that correspond to different dilutions
   Cq = rnorm(72, mean = 25, sd = 2) - log2(rep(c(2, 0.5, 0.125), times = 24)) * 3
 )
 
@@ -73,5 +91,17 @@ for (i in seq_along(plots)) {
   ggsave(filename = paste0("Plot_", unique(data$Control)[i], ".png"), plot = plots[[i]])
 }
 
+# Arrange all plots in a grid layout
+pdf("All_Plots.pdf", width = 11, height = 8.5) # Landscape layout
+gridExtra::marrangeGrob(grobs = plots, nrow = 3, ncol = 2) %>% 
+  print()
+dev.off()
+
+# Save all plots in a multi-page PDF
+multi_page_plot <- marrangeGrob(grobs = plots, nrow = 3, ncol = 2)
+ggsave("All_Plots.pdf", multi_page_plot, width = 11, height = 8.5)
+
 # Print the R² table
 print(r2_table)
+```
+
