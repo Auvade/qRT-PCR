@@ -22,7 +22,7 @@ library(readr)
 # setwd("path/to/your/directory")
 
 # Load in your data or the "Butterfly Plot Example Data.csv" file.
-data <- read_csv("Desktop/Universal Folder/Data Analysis Projects/Cell Biology/Gene Expression Analysis/Butterfly Plot Example Data.csv")
+data <- read_csv("Butterfly Plot Example Data.csv")
 
 # Ensure data structure is correct
 str(data)
