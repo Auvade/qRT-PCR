@@ -1,7 +1,23 @@
+---
+title: "qRT-PCR Sample Prepration Method Selection"
+author: "Bodhi Hueffmeier"
+date: "2025-08-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
 # Load required libraries
-library(ggplot2)
-library(dplyr)
-library(tidyr)
+library(ggplot2) # For plotting
+library(dplyr) # For data manipulation
+library(tidyr) # For data manipulation
+library(gridExtra) # For arranging multiple plots
+
+# set the working directory to the location of your data files.
+# setwd("path/to/your/data") # Uncomment and set your path if needed
 
 # Example data (replace with your actual dataset)
 set.seed(123)
@@ -20,7 +36,7 @@ data <- data %>% mutate(LogTemplate = log2(Template)) # Use log2()
 regression_results <- data %>%
   group_by(SamplePrep, Gene) %>%
   summarize(
-    lm_model = list(lm(Cq ~ LogTemplate, data = cur_data())), # Linear model
+    lm_model = list(lm(Cq ~ LogTemplate, data = pick(everything()))), # Linear model
     Average_Cq = mean(Cq), # Overall average Cq
     Std_Dev_Cq = sd(Cq), # Standard deviation of Cq
     Avg_Cq_Template_4 = mean(Cq[Template == 4], na.rm = TRUE), # Average Cq for Template = 4
@@ -48,7 +64,7 @@ summary_table <- regression_results %>%
 # Save the summary table as a CSV file
 write.csv(summary_table, "summary_table.csv", row.names = FALSE)
 
-# Create plots for each SamplePrep and Gene
+# Create plots for each Sample Prep and Gene
 plots <- lapply(unique(data$SamplePrep), function(sample_prep) {
   lapply(unique(data$Gene), function(gene) {
     gene_data <- data %>% filter(SamplePrep == sample_prep, Gene == gene)
@@ -69,7 +85,7 @@ plots <- lapply(unique(data$SamplePrep), function(sample_prep) {
   })
 })
 
-# Save plots for each SamplePrep and Gene
+# Save plots for each Sample Prep and Gene
 for (i in seq_along(plots)) {
   for (j in seq_along(plots[[i]])) {
     ggsave(
@@ -79,5 +95,20 @@ for (i in seq_along(plots)) {
   }
 }
 
+# Combine all plots into a single list to enable the grobs() function to handle them correctly
+plots <- unlist(plots, recursive = FALSE)
+
+# Arrange all plots in a grid layout
+pdf("All_Plots.pdf", width = 11, height = 8.5) # Landscape layout
+gridExtra::marrangeGrob(grobs = plots, nrow = 2, ncol = 3) %>% 
+  print()
+dev.off()
+
+# Save all plots in a multi-page PDF
+multi_page_plot <- marrangeGrob(grobs = plots, nrow = 2, ncol = 3, top = "qRT-PCR Sample Preparation Method Selection Plots")
+ggsave("All_Plots.pdf", multi_page_plot, width = 11, height = 8.5)
+
 # Display the summary table
 print(summary_table)
+```
+
