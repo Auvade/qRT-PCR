@@ -98,7 +98,7 @@ gridExtra::marrangeGrob(grobs = plots, nrow = 3, ncol = 2) %>%
 dev.off()
 
 # Save all plots in a multi-page PDF
-multi_page_plot <- marrangeGrob(grobs = plots, nrow = 3, ncol = 2)
+multi_page_plot <- marrangeGrob(grobs = plots, nrow = 3, ncol = 2, top = "Endogenous Control Gene Comparison Plots")
 ggsave("All_Plots.pdf", multi_page_plot, width = 11, height = 8.5)
 
 # Print the R² table
