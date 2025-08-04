@@ -1,7 +1,23 @@
+---
+title: "Manual vs. Automated Sample Preparation Methods"
+author: "Bodhi Hueffmeier"
+date: "2025-08-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
 # Load required libraries
 library(ggplot2)
 library(dplyr)
 library(tidyr)
+
+# Set the working directory (optional)
+# setwd("path/to/your/directory") # Uncomment and set your path if needed
+
 
 # Example data (replace with your actual dataset)
  set.seed(123)
@@ -99,3 +115,5 @@ ggsave("Comparison of Cq Values: Automated vs Manual \nfor Common Targets at Tem
 # Print success message
 cat("Analysis complete. Outputs saved as 'summary_table_Automated_vs_Manual_common_targets.csv',",
     "'anova_results_Automated_vs_Manual_common_targets.csv', and 'comparison_plot_Automated_vs_Manual_common_targets.png'\n")
+```
+
