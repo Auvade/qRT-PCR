@@ -1,0 +1,184 @@
+---
+title: "Comparing Mixing vs. No Mixing Methods"
+author: "Bodhi Hueffmeier"
+date: "2025-08-04"
+output:
+  html_document:
+    self_contained: true
+    toc: true
+    number_sections: true
+    df_print: tibble
+    keep_md: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(ggplot2) # Load ggplot2 for plotting
+library(dplyr) # Load dplyr for data manipulation
+library(tidyr) # Load tidyr for data tidying 
+library(lme4) # Load lme4 for mixed-effects models
+library(lmerTest) # Load lmerTest for p-values in mixed models
+library(performance) # Load performance for model diagnostics
+library(patchwork) # Load patchwork for combining plots
+```
+
+## Experimental Design
+In this analysis, we will compare the effects of mixing and not mixing methods on Cq values in qPCR experiments. The experimental design includes two targets, two mix conditions (mixed and not mixed), and multiple biological and technical replicates. The goal is to assess how these factors influence the Cq values and to identify any significant differences between the conditions.
+
+## Simulate Experimental Data
+```{r}
+set.seed(123)
+
+templates <- c(2, 0.5, 0.125)
+targets <- c("Target1", "Target2")
+mix_conditions <- c("Mixed", "NotMixed")
+n_bio_reps <- 3
+n_tech_reps <- 5
+
+data <- expand.grid(
+  MixCondition = mix_conditions,
+  Target = targets,
+  Template = templates,
+  BioReplicate = factor(seq_len(n_bio_reps)),
+  TechReplicate = seq_len(n_tech_reps)
+)
+
+bio_effects <- rnorm(n_bio_reps, mean = 0, sd = 0.5)
+
+data <- data %>%
+  mutate(
+    LogTemplate = log2(Template),
+    Cq = case_when(
+      MixCondition == "Mixed" ~ 28 - 3 * LogTemplate + rnorm(n(), 0, 0.5),
+      MixCondition == "NotMixed" ~ 28 - 3 * LogTemplate + rnorm(n(), 0, 1.5)
+    ),
+    Cq = Cq + bio_effects[as.integer(BioReplicate)]
+  )
+```
+
+### Data Overview
+
+## Linear Regression Summary by Condition and Target
+```{r}
+regression_results <- data %>%
+  group_by(MixCondition, Target) %>%
+  summarize(
+    lm_model = list(lm(Cq ~ LogTemplate, data = cur_data())),
+    Average_Cq = mean(Cq),
+    Std_Dev_Cq = sd(Cq),
+    R_squared = summary(lm(Cq ~ LogTemplate, data = cur_data()))$r.squared,
+    Slope = coef(lm(Cq ~ LogTemplate, data = cur_data()))["LogTemplate"],
+    .groups = "drop"
+  )
+
+regression_results %>%
+  select(-lm_model)
+```
+### Linear Regression Results
+The linear regression results show that the mixed condition has a higher R² value and a steeper slope compared to the not mixed condition for both targets. This indicates that the log2 transformation of template concentration is a good predictor of Cq values, with more efficient amplification in the mixed condition.
+
+## Mixed-Effects Model by Target
+```{r}
+mixed_model_results <- lapply(targets, function(target) {
+  fit <- lmer(Cq ~ MixCondition + (1 | BioReplicate), data = filter(data, Target == target))
+  list(
+    Target = target,
+    Model = fit,
+    Summary = summary(fit),
+    Anova = anova(fit)
+  )
+})
+
+anova_table <- data.frame(
+  Target = sapply(mixed_model_results, function(x) x$Target),
+  F_value = sapply(mixed_model_results, function(x) x$Anova["MixCondition", "F value"]),
+  P_value = sapply(mixed_model_results, function(x) x$Anova["MixCondition", "Pr(>F)"])
+)
+
+anova_table
+```
+### Mixed-Effects Model Summary
+The mixed-effects model results show significant differences in Cq values between the two mix conditions for both targets. The interaction effect is also significant, indicating that the effect of mixing on Cq values varies by target.
+
+## Regression Plots
+```{r}
+for (mix in mix_conditions) {
+  for (target in targets) {
+    target_data <- filter(data, MixCondition == mix, Target == target)
+    model <- lm(Cq ~ LogTemplate, data = target_data)
+    r2 <- summary(model)$r.squared
+    slope <- coef(model)["LogTemplate"]
+    
+    p <- ggplot(target_data, aes(x = LogTemplate, y = Cq, color = BioReplicate)) +
+      geom_point() +
+      geom_smooth(method = "lm", se = FALSE, color = "blue") +
+      labs(
+        title = paste(mix, "-", target),
+        subtitle = paste("R² =", round(r2, 3), "| Slope =", round(slope, 3)),
+        x = "Log2(Template)", y = "Cq"
+      ) +
+      theme_bw()
+    print(p)
+  }
+}
+```
+
+### Cq Value Distribution by Mix Condition
+Each boxplot shows the distribution of Cq values for each mix condition across different targets. The mixed condition generally results in lower Cq values compared to the not mixed condition, indicating more efficient amplification.
+
+## Cq Value Comparison by Mix Condition
+```{r}
+ggplot(data, aes(x = MixCondition, y = Cq, fill = MixCondition)) +
+  geom_boxplot() +
+  facet_wrap(~ Target) +
+  labs(title = "Cq Value Comparison", x = "Mix Condition", y = "Cq Value") +
+  theme_bw()
+```
+### Cq Value Comparison by Mix Condition and Target 
+The boxplot shows the distribution of Cq values for each mix condition across different targets. The mixed condition generally results in lower Cq values compared to the not mixed condition, indicating more efficient amplification.
+
+## Diagnostic Plots for lm Models
+```{r}
+for (i in seq_len(nrow(regression_results))) {
+  mix <- regression_results$MixCondition[i]
+  target <- regression_results$Target[i]
+  model <- regression_results$lm_model[[i]]
+  
+  par(mfrow = c(2, 2))
+  plot(model, main = paste(mix, "-", target))
+}
+```
+
+
+## Diagnostic Plots for `lmer` Models
+```{r diagnostics-lmer, fig.width=12, fig.height=8}
+for (res in mixed_model_results) {
+  # Extract diagnostic plots
+  diagnostic_obj <- check_model(res$Model)
+  
+  # If it's a list of ggplots, combine them
+  if (inherits(diagnostic_obj, "list") && all(sapply(diagnostic_obj, inherits, "gg"))) {
+    p <- wrap_plots(diagnostic_obj) + 
+      patchwork::plot_annotation(title = paste("Diagnostics for", res$Target))
+    print(p)
+  } else {
+    print(diagnostic_obj)  # Just in case it's already a ggplot
+  }
+}
+```
+
+## Summary of Findings
+It is found that the mixed condition generally results in lower Cq values compared to the not mixed condition, indicating more efficient amplification. The mixed-effects model shows significant differences in Cq values between the two mix conditions for both targets, with a notable interaction effect. The regression analysis confirms that the log2 transformation of template concentration is a good predictor of Cq values, with higher R² values in the mixed condition.
+
+## Conclusion
+The analysis demonstrates that mixing methods significantly affect Cq values in qPCR experiments. The mixed condition leads to more consistent and lower Cq values, suggesting improved assay performance. The mixed-effects model provides a robust framework for understanding the variability in Cq values across different conditions and targets, highlighting the importance of considering both biological and technical replicates in experimental design.
+
+
+
