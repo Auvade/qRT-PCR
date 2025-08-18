@@ -10,7 +10,7 @@ output:
     df_print: tibble
     keep_md: false
     code_folding: show
-    theme: readable
+    theme: cerulean
 ---
 
 ```{r setup, include=FALSE}
@@ -141,6 +141,7 @@ ggplot(data, aes(x = MixCondition, y = Cq, fill = MixCondition)) +
   labs(title = "Cq Value Comparison", x = "Mix Condition", y = "Cq Value") +
   theme_bw()
 ```
+
 ### Cq Value Comparison by Mix Condition and Target 
 The boxplot shows the distribution of Cq values for each mix condition across different targets. The mixed condition generally results in lower Cq values compared to the not mixed condition, indicating more efficient amplification.
 
