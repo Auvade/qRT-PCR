@@ -1,0 +1,235 @@
+---
+title: "Duplex qRT-PCR Assay Validation for Relative Gene Expression Analysis"
+author: "Bodhi Hueffmeier"
+date: "2025-08-05"
+output: 
+  html_document: 
+    theme: cerulean
+---
+
+```{r klippy, include=FALSE}
+klippy::klippy(
+  lang = c("r", "markdown"),
+  all_precode = FALSE,
+  position = c("top", "right"),
+  color = "lightblue",
+  tooltip_message = "Copy code",
+  tooltip_success = "Copied!"
+)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(ggplot2) # for plotting
+library(dplyr) # for data manipulation
+library(tidyr) # for data manipulation
+library(broom) # for tidy regression output
+library(patchwork) # for combining plots
+library(kableExtra) # for creating tables
+```
+
+The purpose of validating duplex qPCR assays is to ensure that the assay can accurately and reliably detect multiple targets in a single reaction. This validation process involves assessing the efficiency, specificity, and reproducibility of the duplex qPCR assay. 
+
+The following steps outline the process of validating duplex qPCR assays:
+
+1. **Design the Assay**: Design primers and probes for each target gene to ensure they do not interfere with each other during amplification.
+
+2. **Prepare the Reaction Mix**: Create a reaction mix that includes all necessary components for qPCR, such as DNA/RNA polymerase, dNTPs, primers, probes, and buffer.
+
+3. **Set Up the Duplex qPCR Reactions**: Prepare the duplex qPCR reactions by combining the primers and probes for both targets in a single reaction.
+
+4. **Run the qPCR**: Perform the qPCR using a thermal cycler with appropriate cycling conditions for duplex reactions.
+
+5. **Analyze the Data**: Analyze the qPCR data to determine the efficiency and specificity of the duplex assay. This includes calculating the Cq values for each target, assessing the amplification curves, and determining the efficiency of each target.
+
+The experimental design of investigating duplex qPCR assays involves comparing the performance of singleplex and duplex reactions. This can be done by running both types of reactions in parallel and comparing the Cq values, amplification efficiencies, and specificity of each target. For this experiment, we will simulate qPCR data for four genes (gene1, gene2, gene3, and gene4) and their duplex combinations (gene1_gene2 and gene3_gene4). The simulation will include different RNA input volumes to assess the efficiency of the duplex reactions.
+
+To assess the efficiency of the duplex qPCR assays, we will perform linear regression on the Cq values against the log2 of the RNA input volumes. The slope of the regression line will be used to calculate the efficiency of each target in both singleplex and duplex reactions. 
+
+The slope is derived from the linear regression of Cq values against the log2 of the RNA input volumes. A higher efficiency indicates a more effective amplification of the target gene. 
+
+Typically, the efficiency of a qPCR assay should be between 90% and 110%. If the efficiency is outside this range, it may indicate issues with the assay design or reaction conditions. If the efficiency is too high, it could be because of the PCR inhibition or primer-dimer formation, while if the efficiecny is too low, it could indicate poor primer design or suboptimal reaction conditions. Each dilution in this experiment is a 2-fold dilution, meaning that the RNA input volume is halved with each step. The log2 transformation of the dilution factor allows us to linearize the relationship between Cq values and RNA input volumes, making it easier to assess the efficiency of the amplification. Ideally, the perfect slope is equal to -1, which corresponds to an efficiency of 100%.
+
+Tradionally, efficiency is caluated using the formula: 
+\[ \text{Efficiency} = (10^{(-1/\text{slope})} - 1) \times 100 \]
+
+Since we are using 2-fold dilutions and performed a log2n transformation on the data, we will use the formula:
+\[ \text{Efficiency} = (2^{(-1/\text{slope})} - 1) \times 100 \]
+
+
+## Simulate qPCR Data
+
+```{r Simulate-qPCR-data}
+set.seed(123)
+
+# Define sample types
+sample_types <- c("gene1", "gene2", "gene3", "gene4", "gene1_gene2", "gene3_gene4")
+
+# Create design
+template <- expand.grid(
+  SampleType = sample_types,
+  VolRNA = c(2, 1, 0.5, 0.25),  # VolRNA as powers of 2
+  Replicate = 1:2, # Two replicates for each sample
+  BioRep = 1:2 # Two biological replicates for each sample
+)
+template$Well <- 1:nrow(template)
+
+# Simulate targets
+data <- template %>%
+  mutate(SampleName = SampleType) %>% # Save a copy of SampleName before splitting it
+  separate(SampleType, into = c("Target1", "Target2"), sep = "_", fill = "right") %>% # Split SampleType into Target1 and Target2
+  pivot_longer(cols = c(Target1, Target2), names_to = "TargetPos", values_to = "Target") %>% # Reshape data to long format
+  filter(!is.na(Target)) %>% # Filter out NA values
+  mutate(
+    ReactionType = ifelse(grepl("_", SampleName), "Duplex", "Singleplex"), # Determine reaction type by checking for underscores
+    Log2VolRNA = log2(VolRNA) 
+  ) 
+
+# Calculate FoldDilution and Log2Dilution
+data$FoldDilution <- max(data$VolRNA) / data$VolRNA
+data$Log2Dilution <- log2(data$FoldDilution) 
+
+# Create SampleName with VolRNA, Replicate, and BioRep
+# Note: SampleName is created after splitting SampleType to ensure correct naming, and typically SampleName would be how the samples are labeled in the qPCR plate and would be used to collect the metadata about the samples.
+data$SampleName <- data$SampleName %>% paste0(data$SampleType, "_", data$VolRNA, "µL", "_", "Rep", data$Replicate, "_", "Bio", data$BioRep)
+
+# Simulate Cq values based on gene + VolRNA
+target_means <- c(gene1 = 25, gene2 = 26, gene3 = 27, gene4 = 28)
+data <- data %>%
+  mutate(
+    BaseMean = target_means[Target],
+    Cq = rnorm(n(), mean = BaseMean + Log2VolRNA, sd = 0.5)
+  )
+```
+
+## Linear Regression and Efficiency
+
+```{r linear-regression-efficiency}
+# Run linear regression per target and reaction type
+regression_results <- data %>%
+  group_by(Target, ReactionType) %>%
+  do({
+    fit <- lm(Cq ~ Log2Dilution, data = .)
+    tidy_fit <- broom::tidy(fit)      # slope & intercept
+    glance_fit <- broom::glance(fit)  # R^2, etc.
+    
+    slope <- tidy_fit$estimate[tidy_fit$term == "Log2Dilution"]
+    intercept <- tidy_fit$estimate[tidy_fit$term == "(Intercept)"]
+    r2 <- glance_fit$r.squared
+    efficiency <- (2^(-1/slope) - 1) * 100
+    
+    tibble(
+      Slope = slope,
+      Intercept = intercept,
+      R2 = r2,
+      Efficiency_percent = efficiency
+    )
+  }) %>%
+  ungroup()
+
+kable(regression_results, format = "html", escape = FALSE, caption = "Regression Results for Each Target and Reaction Type") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+## Diagnostic Residual Plots
+
+```{r Diagnostic Residual Plots, fig.width=10, fig.height=6}
+# Per-target plots with Efficiency, R², and Intercept for each ReactionType
+unique_targets <- unique(data$Target)
+plots <- vector("list", length(unique_targets))
+names(plots) <- unique_targets
+
+for (g in unique_targets) {
+  gene_data <- subset(data, Target == g)
+  
+  # Get regression stats for this target across reaction types
+  stats <- regression_results %>%
+    filter(Target == g)
+  
+  # Build subtitle with both Singleplex + Duplex if they exist
+  subtitle_text <- paste(
+    apply(stats, 1, function(row) {
+      paste0(
+        row["ReactionType"], 
+        ": E=", round(as.numeric(row["Efficiency_percent"]), 1), "%, ",
+        "R²=", round(as.numeric(row["R2"]), 3), ", ",
+        "y-int=", round(as.numeric(row["Intercept"]), 2), ", ",
+        "slope=", round(as.numeric(row["Slope"]), 2)
+      )
+    }),
+    collapse = "\n"
+  )
+  
+  # Plot
+  p <- ggplot(gene_data, aes(x = Log2VolRNA, y = Cq, color = ReactionType)) +
+    geom_point(aes(scale_shape_binned = Replicate), size = 2.5) +
+    geom_smooth(method = "lm", se = FALSE) +
+    labs(
+      title = paste0("Cq vs log2(VolRNA): ", g),
+      subtitle = subtitle_text,
+      x = "log2(VolRNA)", 
+      y = "Cq"
+    ) +
+    theme_minimal()
+  
+  plots[[as.character(g)]] <- p
+  
+  # Save individual PNGs
+  ggsave(filename = paste0("qPCR_plot_", g, ".png"), plot = p, width = 7, height = 5, dpi = 1200)
+}
+
+# Show all plots in RStudio grid
+wrap_plots(plots, ncol = 2, axes = "collect")
+
+# Save combined PNG
+ggsave("qPCR_plots_combined.png", wrap_plots(plots, ncol = 2, axes = "collect"), width = 14, height = 10, dpi = 1200)
+```
+
+## Cq Boxplot Comparison
+
+```{r boxplot-comparison, fig.width=10, fig.height=6}
+ggplot(data, aes(x = ReactionType, y = Cq, fill = ReactionType)) +
+  geom_boxplot() +
+  facet_wrap(~ Target, scales = "fixed") +
+  theme_minimal() +
+  labs(title = "Cq Value Comparison Between Reaction Types",
+       x = "Reaction Type", y = "Cq Value")
+```
+
+## ANOVA Results
+
+```{r anova-results}
+anova_results <- data %>%
+  group_by(Target) %>%
+  do({
+    aov_model <- aov(Cq ~ ReactionType, data = .)
+    tidy_summary <- summary(aov_model)[[1]]
+    data.frame(
+      F_value = tidy_summary["ReactionType", "F value"],
+      P_value = tidy_summary["ReactionType", "Pr(>F)"]
+    )
+  })
+
+kable(anova_results, format = "html", escape = FALSE, caption = "ANOVA Results for Cq Values by Reaction Type") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+## Conclusion
+
+The validation of duplex qPCR assays demonstrated that the efficiency of the duplex reactions was comparable to that of singleplex reactions. The slopes of the regression lines for both reaction types were close to -1, indicating good amplification efficiency. The R² values suggested a strong linear relationship between Cq values and log2 RNA input volumes. The boxplot comparison showed that the Cq values for duplex reactions were generally higher than those for singleplex reactions, which is expected due to the competition between targets in a duplex reaction. The ANOVA results indicated that there were significant differences in Cq values between reaction types, confirming the need for careful interpretation of duplex qPCR data.
+
+## Next Steps
+
+Depending on the objectives of the study, the next steps could include:
+
+- **Further Optimization**: If the efficiencies are not within the desired range, further optimization of primer/probe concentrations or reaction conditions may be necessary. Depending on the supplier of the primers, they may have recommendations for optimal concentrations or a mastermix that is made for multiplex conditions.
+
+Note: when there are multiple primers in a reaction, there can be a competition of NTPs, which can lead to suboptimal amplification of one or more targets. This is why it is important to optimize the reaction conditions for duplex qPCR assays.
+
+- **Validation with Biological Samples**: Testing the duplex qPCR assays on biological samples to confirm their performance in real-world conditions.
+
+- **Comparison with Other Methods**: Comparing the duplex qPCR results with other methods of gene expression analysis, such as RNA-seq or singleplex qPCR, to validate the findings.
+
+If the objective is to have a quadplex qPCR assay, the next steps could include having two endeogenous control genes for two different targets of interest. Each target and endogenous control would have to be validated separately, and then the duplex assays would need to be validated in combination. This would involve repeating the validation steps outlined above for each combination of targets and endogenous controls, ensuring that the assay can accurately and reliably detect all targets in a single reaction.
+
+Having two endogenous controls is important for normalizing the expression levels of the target genes, especially in complex biological samples where variations in RNA input and quality can affect the results. The validation process would ensure that the duplex assays maintain their efficiency and specificity when multiple targets are present, allowing for accurate relative gene expression analysis.
